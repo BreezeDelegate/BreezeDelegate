@@ -372,11 +372,15 @@ def calendar_svg(weeks: list[dict]) -> tuple[str, int, int, float]:
         best = max(best, current)
     average = sum(values) / len(values) if values else 0.0
 
+    scale = 4.0
+    projected_width = 1.7 * len(weeks) + 11.9
+    viewport_width = 480 / scale
+    horizontal_offset = max(10.2, (viewport_width - projected_width) / 2 + 10.2)
     parts = [
         '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" style="margin-top: -130px;" viewBox="0,0 480,270">',
         '<filter id="brightness1"><feComponentTransfer><feFuncR type="linear" slope="0.6"/><feFuncG type="linear" slope="0.6"/><feFuncB type="linear" slope="0.6"/></feComponentTransfer></filter>',
         '<filter id="brightness2"><feComponentTransfer><feFuncR type="linear" slope="0.2"/><feFuncG type="linear" slope="0.2"/><feFuncB type="linear" slope="0.2"/></feComponentTransfer></filter>',
-        '<g transform="scale(4) translate(12, 0)">',
+        f'<g transform="scale(4) translate({horizontal_offset:.3f}, 0)">',
     ]
     size = 6
     for i, week in enumerate(weeks):

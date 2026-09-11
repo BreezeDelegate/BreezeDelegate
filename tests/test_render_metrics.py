@@ -296,5 +296,13 @@ class ProfileMetricsTests(unittest.TestCase):
         self.assertNotIn("never-render-this-name", rendered)
 
 
+    def test_short_calendar_is_centered_instead_of_left_with_blank_history_space(self):
+        weeks = [{"contributionDays": []} for _ in range(25)]
+
+        svg, *_ = rm.calendar_svg(weeks)
+
+        self.assertIn('scale(4) translate(43.000, 0)', svg)
+
+
 if __name__ == "__main__":
     unittest.main()
