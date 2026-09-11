@@ -49,7 +49,7 @@ def run(*args: str) -> str:
     return subprocess.run(args, check=True, text=True, capture_output=True).stdout
 
 
-def gh_json(*args: str) -> dict:
+def gh_json(*args: str) -> dict | list:
     return json.loads(run("gh", *args))
 
 
@@ -84,6 +84,230 @@ def fmt_count(n: int) -> str:
         return f"{n / 1000:.2g}k"
     return str(n)
 
+
+def calendar_start(created: dt.datetime, now: dt.datetime) -> dt.date:
+    """Return the first Sunday worth rendering for the public activity calendar."""
+    try:
+        one_year_ago = now.date().replace(year=now.year - 1)
+    except ValueError:
+        one_year_ago = now.date().replace(year=now.year - 1, day=28)
+    first_day = max(created.date(), one_year_ago)
+    return first_day - dt.timedelta(days=(first_day.weekday() + 1) % 7)
+
+
+def activity_level(count: int, maximum: int) -> str:
+    if count <= 0 or maximum <= 0:
+        return "NONE"
+    ratio = count / maximum
+    if ratio <= 0.25:
+        return "FIRST_QUARTILE"
+    if ratio <= 0.5:
+        return "SECOND_QUARTILE"
+    if ratio <= 0.75:
+        return "THIRD_QUARTILE"
+    return "FOURTH_QUARTILE"
+
+
+def build_activity_weeks(
+    events: list[dict], created: dt.datetime, now: dt.datetime
+) -> list[dict]:
+    """Build a GitHub-like calendar from explicitly public events only."""
+    start = calendar_start(created, now)
+    end = now.date()
+    counts: collections.Counter[dt.date] = collections.Counter()
+    for event in events:
+        if event.get("visibility") != "public":
+            continue
+        raw_date = str(event.get("date") or "")[:10]
+        try:
+            event_date = dt.date.fromisoformat(raw_date)
+        except ValueError:
+            continue
+        if start <= event_date <= end:
+            counts[event_date] += max(0, int(event.get("count") or 0))
+
+    maximum = max(counts.values(), default=0)
+    weeks: list[dict] = []
+    week_days: list[dict] = []
+    cursor = start
+    while cursor <= end:
+        count = counts[cursor]
+        week_days.append(
+            {
+                "date": cursor.isoformat(),
+                "contributionCount": count,
+                "contributionLevel": activity_level(count, maximum),
+            }
+        )
+        if cursor.weekday() == 5 or cursor == end:
+            weeks.append({"contributionDays": week_days})
+            week_days = []
+        cursor += dt.timedelta(days=1)
+    return weeks
+
+
+def summarize_private_repos(repos: list[dict], now: dt.datetime) -> dict:
+    """Reduce private repository metadata to non-identifying aggregate values."""
+    languages: collections.Counter[str] = collections.Counter()
+    active_30d = 0
+    disk_kb = 0
+    forks = 0
+    threshold = now.astimezone(dt.timezone.utc) - dt.timedelta(days=30)
+    for repo in repos:
+        disk_kb += int(repo.get("size") or 0)
+        forks += int(bool(repo.get("fork")))
+        language = repo.get("language")
+        if language:
+            languages[str(language)] += 1
+        raw_updated = str(repo.get("updated_at") or "")
+        if raw_updated:
+            try:
+                updated = dt.datetime.fromisoformat(raw_updated.replace("Z", "+00:00"))
+            except ValueError:
+                updated = None
+            if updated is not None and updated >= threshold:
+                active_30d += 1
+    return {
+        "repositories": len(repos),
+        "disk_kb": disk_kb,
+        "forks": forks,
+        "active_30d": active_30d,
+        "languages": languages.most_common(5),
+    }
+
+
+def private_work_section(summary: dict) -> str:
+    """Render only aggregate private-work statistics; never repository identities."""
+    repositories = int(summary.get("repositories") or 0)
+    repo_label = "repository" if repositories == 1 else "repositories"
+    language_items = [
+        f"{int(count)} {html.escape(str(name))}"
+        for name, count in summary.get("languages", [])[:5]
+    ]
+    language_lines = [" · ".join(language_items[:2]), " · ".join(language_items[2:5])]
+    language_lines = [line for line in language_lines if line]
+    if not language_lines:
+        language_lines = ["No primary-language metadata"]
+
+    language_html = "\n".join(
+        f'                            <div class="field" style="margin-left:37px">{line}</div>'
+        for line in language_lines
+    )
+    return f'''            <section class="private-work">
+                <h2 class="field">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+                        <path fill-rule="evenodd" d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8z"/>
+                    </svg>
+                    Private work
+                </h2>
+                <div class="row">
+                    <section>
+                        <div class="field" style="margin-left:37px">{repositories} private {repo_label}</div>
+                        <div class="field" style="margin-left:37px">{fmt_size_kb(int(summary.get("disk_kb") or 0))} repository data</div>
+                        <div class="field" style="margin-left:37px">{int(summary.get("active_30d") or 0)} updated in the last 30 days</div>
+                    </section>
+                    <section>
+                        <div class="field" style="margin-left:37px">Primary languages by repository</div>
+{language_html}
+                    </section>
+                </div>
+                <div class="field" style="margin-left:37px"><small>Aggregated only · repository identities and content stay private.</small></div>
+            </section>'''
+
+
+def public_activity_events(
+    commits: list[dict], pull_requests: list[dict], issues: list[dict]
+) -> list[dict]:
+    """Normalize only public-source API records into calendar events."""
+    events: list[dict] = []
+    for item in commits:
+        commit = item.get("commit") or {}
+        author = commit.get("author") or {}
+        committer = commit.get("committer") or {}
+        raw_date = author.get("date") or committer.get("date")
+        if raw_date:
+            events.append({"date": str(raw_date)[:10], "count": 1, "visibility": "public"})
+    for item in pull_requests:
+        raw_date = item.get("created_at")
+        if raw_date:
+            events.append({"date": str(raw_date)[:10], "count": 1, "visibility": "public"})
+    for item in issues:
+        raw_date = item.get("created_at")
+        if raw_date:
+            events.append({"date": str(raw_date)[:10], "count": 1, "visibility": "public"})
+    return events
+
+
+def inject_private_work(svg: str, section: str, extra_height: int = 96) -> str:
+    """Insert private aggregates before Languages and extend the root canvas."""
+    language_index = svg.find("25 Languages")
+    if language_index < 0:
+        raise RuntimeError("languages marker missing")
+    section_index = svg.rfind("<section", 0, language_index)
+    if section_index < 0:
+        raise RuntimeError("languages section marker missing")
+    svg = svg[:section_index] + section + "\n" + svg[section_index:]
+
+    root = re.search(r'\A<svg\b[^>]*\bheight="(\d+)"', svg)
+    if root is None:
+        raise RuntimeError("root SVG height missing")
+    old_height = int(root.group(1))
+    start, end = root.span(1)
+    return svg[:start] + str(old_height + extra_height) + svg[end:]
+
+
+def apply_public_activity_labels(svg: str) -> str:
+    replacements = {
+        "Contributions calendar": "Public activity calendar",
+        "Commits streaks": "Public activity streaks",
+        "Commits per day": "Public activity per day",
+        "These metrics include private contributions": (
+            "Public activity excludes private repositories · private repository statistics are aggregated"
+        ),
+    }
+    for old, new in replacements.items():
+        svg = replace_once(svg, old, new)
+    return svg
+
+def public_issue_pages(kind: str) -> list[dict]:
+    """Fetch authored public PRs or issues for the public-only activity calendar."""
+    if kind not in {"pr", "issue"}:
+        raise ValueError("kind must be 'pr' or 'issue'")
+    items: list[dict] = []
+    page = 1
+    while page <= 10:
+        data = gh_json(
+            "api", "--method", "GET", "search/issues",
+            "-f", f"q=is:{kind} author:{USER} is:public",
+            "-f", "per_page=100", "-f", f"page={page}",
+        )
+        if not isinstance(data, dict):
+            raise RuntimeError("unexpected GitHub issue-search response")
+        batch = data.get("items", [])
+        items.extend(batch)
+        if len(items) >= min(int(data.get("total_count", 0)), 1000) or not batch:
+            break
+        page += 1
+    return items
+
+
+def private_repo_pages() -> list[dict]:
+    """Fetch only repositories owned by the authenticated user and marked private."""
+    repos: list[dict] = []
+    page = 1
+    while page <= 20:
+        data = gh_json(
+            "api", "--method", "GET", "user/repos",
+            "-f", "visibility=private", "-f", "affiliation=owner",
+            "-f", "sort=updated", "-f", "per_page=100", "-f", f"page={page}",
+        )
+        if not isinstance(data, list):
+            raise RuntimeError("unexpected GitHub private-repository response")
+        repos.extend(data)
+        if len(data) < 100:
+            break
+        page += 1
+    return repos
 
 def fetch_avatar_data(url: str) -> str:
     req = urllib.request.Request(url, headers={"User-Agent": "BreezeDelegate-profile/1.0"})
@@ -216,9 +440,6 @@ def replace_once(text: str, old: str, new: str) -> str:
 
 def render() -> str:
     now = dt.datetime.now(TZ)
-    start = now.replace(year=now.year - 1)
-    start -= dt.timedelta(days=(start.weekday() + 1) % 7)
-    start = start.replace(hour=0, minute=0, second=0, microsecond=0)
 
     query = f'''query {{
       user(login: "{USER}") {{
@@ -234,14 +455,25 @@ def render() -> str:
           totalCount
           nodes {{ isFork stargazerCount forkCount diskUsage watchers {{ totalCount }} releases {{ totalCount }} licenseInfo {{ spdxId }} }}
         }}
-        contributionsCollection(from: "{start.astimezone(dt.timezone.utc).isoformat()}", to: "{now.astimezone(dt.timezone.utc).isoformat()}") {{
-          contributionCalendar {{ totalContributions weeks {{ contributionDays {{ date contributionCount contributionLevel }} }} }}
-        }}
       }}
     }}'''
-    user = gh_json("api", "graphql", "-f", f"query={query}")["data"]["user"]
+    response = gh_json("api", "graphql", "-f", f"query={query}")
+    if not isinstance(response, dict):
+        raise RuntimeError("unexpected GitHub GraphQL response")
+    user = response["data"]["user"]
+    created = dt.datetime.fromisoformat(user["createdAt"].replace("Z", "+00:00")).astimezone(TZ)
     repos = user["repositories"]["nodes"]
     nonfork = [r for r in repos if not r["isFork"]]
+
+    public_commit_items = commit_pages()
+    public_pr_items = public_issue_pages("pr")
+    public_issue_items = public_issue_pages("issue")
+    private_repos = private_repo_pages()
+    activity_events = public_activity_events(public_commit_items, public_pr_items, public_issue_items)
+    weeks = build_activity_weeks(activity_events, created, now)
+    days = [day for week in weeks for day in week["contributionDays"]]
+    iso_svg, best_streak, max_day, average = calendar_svg(weeks)
+    private_stats = summarize_private_repos(private_repos, now)
 
     public_prs = search_count("search/issues", f"is:pr author:{USER} is:public")
     reviewed_prs = search_count("search/issues", f"is:pr reviewed-by:{USER} is:public")
@@ -260,20 +492,18 @@ def render() -> str:
     watchers = sum(int(r["watchers"]["totalCount"]) for r in nonfork)
     disk_kb = sum(int(r.get("diskUsage") or 0) for r in nonfork)
 
-    days = [d for w in user["contributionsCollection"]["contributionCalendar"]["weeks"] for d in w["contributionDays"]]
-    weeks = user["contributionsCollection"]["contributionCalendar"]["weeks"]
-    iso_svg, best_streak, max_day, average = calendar_svg(weeks)
-
     top_langs = lang_counter.most_common(8)
     lang_total = sum(lang_counter.values())
     while len(top_langs) < 8:
         top_langs.append(("Other", 0))
     language_count = len([x for x in lang_counter.values() if x > 0])
 
-    with urllib.request.urlopen(TEMPLATE_URL, timeout=30) as response:
-        svg = response.read().decode("utf-8")
+    with urllib.request.urlopen(TEMPLATE_URL, timeout=30) as template_response:
+        svg = template_response.read().decode("utf-8")
 
-    created = dt.datetime.fromisoformat(user["createdAt"].replace("Z", "+00:00")).astimezone(TZ)
+    svg = inject_private_work(svg, private_work_section(private_stats))
+    svg = apply_public_activity_labels(svg)
+
     replacements = {
         "Mero": user.get("name") or USER,
         "Joined GitHub 3 years ago": f"Joined GitHub {age_text(created, now)}",
@@ -303,7 +533,6 @@ def render() -> str:
         "Best streak 209 days": f"Best streak {best_streak} days",
         "Highest in a day at 76": f"Highest in a day at {max_day}",
         "Average per day at ~5.66": f"Average per day at ~{average:.2f}",
-        "These metrics include private contributions": "These metrics use public contributions only",
         "Last updated 11 Sept 2026, 03:53:49 (timezone Europe/Berlin) with lowlighter/metrics@3.34.0":
             f"Last updated {now.strftime('%-d %b %Y, %H:%M:%S')} (timezone Europe/Paris) · layout adapted from lowlighter/metrics@3.34.0",
     }
