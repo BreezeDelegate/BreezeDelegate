@@ -75,6 +75,7 @@ class ProfileMetricsTests(unittest.TestCase):
         self.assertEqual(summary["forks"], 1)
         self.assertEqual(summary["active_30d"], 1)
         self.assertEqual(summary["languages"], [("TypeScript", 1), ("Go", 1)])
+        self.assertEqual(summary["language_total"], 2)
         self.assertNotIn("secret-one", rendered)
         self.assertNotIn("secret-two", rendered)
         self.assertNotIn("html_url", rendered)
@@ -93,7 +94,7 @@ class ProfileMetricsTests(unittest.TestCase):
         self.assertIn("Private work", section)
         self.assertIn("2 private repositories", section)
         self.assertIn("1 updated in the last 30 days", section)
-        self.assertIn("Primary languages by repository", section)
+        self.assertIn("Private languages", section)
         self.assertIn("Aggregated only", section)
         self.assertNotIn("BreezeDelegate/", section)
         self.assertNotIn("github.com/", section)
@@ -296,12 +297,53 @@ class ProfileMetricsTests(unittest.TestCase):
         self.assertNotIn("never-render-this-name", rendered)
 
 
-    def test_short_calendar_is_centered_instead_of_left_with_blank_history_space(self):
+    def test_short_calendar_is_balanced_inside_left_activity_column(self):
         weeks = [{"contributionDays": []} for _ in range(25)]
 
         svg, *_ = rm.calendar_svg(weeks)
 
-        self.assertIn('scale(4) translate(43.000, 0)', svg)
+        self.assertIn('scale(4) translate(13.000, 0)', svg)
+
+
+    def test_short_calendar_stays_inside_left_activity_slot(self):
+        weeks = [{"contributionDays": []} for _ in range(25)]
+
+        svg, *_ = rm.calendar_svg(weeks)
+
+        match = rm.re.search(r'scale\(4\) translate\(([0-9.]+), 0\)', svg)
+        self.assertIsNotNone(match)
+        offset = float(match.group(1))
+        left_px = (offset - 10.2) * 4
+        right_px = (offset + 1.7 * (len(weeks) - 1) + 3.4) * 4
+        self.assertGreaterEqual(left_px, 0)
+        self.assertLessEqual(right_px, 240)
+
+    def test_private_languages_use_compact_colored_bar_and_legend(self):
+        summary = {
+            "repositories": 8,
+            "disk_kb": 4096,
+            "active_30d": 4,
+            "language_total": 8,
+            "languages": [
+                ("TypeScript", 3),
+                ("JavaScript", 2),
+                ("Go", 1),
+                ("Rust", 1),
+                ("Shell", 1),
+            ],
+        }
+
+        section = rm.private_work_section(summary)
+
+        self.assertIn('class="private-language-bar"', section)
+        self.assertIn('#3178c6', section)
+        self.assertIn('#f1e05a', section)
+        self.assertIn('#00ADD8', section)
+        self.assertIn('TypeScript 38%', section)
+        self.assertIn('JavaScript 25%', section)
+        self.assertIn('Go 12%', section)
+        self.assertIn('Other 25%', section)
+        self.assertNotIn('Primary languages by repository', section)
 
 
 if __name__ == "__main__":

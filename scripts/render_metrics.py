@@ -172,6 +172,7 @@ def summarize_private_repos(repos: list[dict], now: dt.datetime) -> dict:
         "disk_kb": disk_kb,
         "forks": forks,
         "active_30d": active_30d,
+        "language_total": sum(languages.values()),
         "languages": languages.most_common(5),
     }
 
@@ -180,19 +181,44 @@ def private_work_section(summary: dict) -> str:
     """Render only aggregate private-work statistics; never repository identities."""
     repositories = int(summary.get("repositories") or 0)
     repo_label = "repository" if repositories == 1 else "repositories"
-    language_items = [
-        f"{int(count)} {html.escape(str(name))}"
-        for name, count in summary.get("languages", [])[:5]
-    ]
-    language_lines = [" · ".join(language_items[:2]), " · ".join(language_items[2:5])]
-    language_lines = [line for line in language_lines if line]
-    if not language_lines:
-        language_lines = ["No primary-language metadata"]
+    language_total = int(summary.get("language_total") or 0)
+    languages = [(str(name), int(count)) for name, count in summary.get("languages", []) if int(count) > 0]
+    if not language_total:
+        language_total = sum(count for _, count in languages)
 
-    language_html = "\n".join(
-        f'                            <div class="field" style="margin-left:37px">{line}</div>'
-        for line in language_lines
-    )
+    compact_languages = languages[:3]
+    compact_count = sum(count for _, count in compact_languages)
+    if language_total > compact_count:
+        compact_languages.append(("Other", language_total - compact_count))
+
+    if compact_languages and language_total:
+        segments = []
+        legend = []
+        for name, count in compact_languages:
+            color = LANG_COLORS.get(name, "#8c959f")
+            pct = 100 * count / language_total
+            segments.append(
+                f'<span style="display:block;height:6px;width:{pct:.4f}%;background:{color}"></span>'
+            )
+            legend.append(
+                '<span style="display:flex;align-items:center;gap:4px;min-width:0;white-space:nowrap">'
+                f'<span style="width:7px;height:7px;border-radius:50%;background:{color};flex:0 0 7px"></span>'
+                f'<span>{html.escape(name)} {round(pct):d}%</span></span>'
+            )
+        language_visual = (
+            '<div class="field" style="margin-left:37px">Private languages</div>'
+            '<div class="private-language-bar" style="display:flex;width:190px;max-width:calc(100% - 42px);height:6px;'
+            'margin:5px 0 5px 37px;overflow:hidden;border-radius:3px;background:#ebedf0">'
+            + ''.join(segments)
+            + '</div>'
+            '<div class="private-language-legend" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));'
+            'column-gap:8px;row-gap:2px;width:190px;max-width:calc(100% - 42px);margin-left:37px;font-size:11px;line-height:14px">'
+            + ''.join(legend)
+            + '</div>'
+        )
+    else:
+        language_visual = '<div class="field" style="margin-left:37px">No primary-language metadata</div>'
+
     return f'''            <section class="private-work">
                 <h2 class="field">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
@@ -207,8 +233,7 @@ def private_work_section(summary: dict) -> str:
                         <div class="field" style="margin-left:37px">{int(summary.get("active_30d") or 0)} updated in the last 30 days</div>
                     </section>
                     <section>
-                        <div class="field" style="margin-left:37px">Primary languages by repository</div>
-{language_html}
+                        {language_visual}
                     </section>
                 </div>
                 <div class="field" style="margin-left:37px"><small>Aggregated only · repository identities and content stay private.</small></div>
@@ -374,8 +399,8 @@ def calendar_svg(weeks: list[dict]) -> tuple[str, int, int, float]:
 
     scale = 4.0
     projected_width = 1.7 * len(weeks) + 11.9
-    viewport_width = 480 / scale
-    horizontal_offset = max(10.2, (viewport_width - projected_width) / 2 + 10.2)
+    activity_slot_width = 240 / scale
+    horizontal_offset = 10.2 + max(0.0, (activity_slot_width - projected_width) / 2)
     parts = [
         '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" style="margin-top: -130px;" viewBox="0,0 480,270">',
         '<filter id="brightness1"><feComponentTransfer><feFuncR type="linear" slope="0.6"/><feFuncG type="linear" slope="0.6"/><feFuncB type="linear" slope="0.6"/></feComponentTransfer></filter>',
