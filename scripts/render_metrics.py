@@ -236,7 +236,6 @@ def private_work_section(summary: dict) -> str:
                         {language_visual}
                     </section>
                 </div>
-                <div class="field" style="margin-left:37px"><small>Aggregated only · repository identities and content stay private.</small></div>
             </section>'''
 
 
