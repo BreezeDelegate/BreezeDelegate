@@ -7,7 +7,7 @@
   <text x="25" y="90" font-family="Arial,Helvetica,sans-serif" font-size="29" font-weight="600" fill="#e6edf3">74</text>
   <text x="25" y="113" font-family="Arial,Helvetica,sans-serif" font-size="12" fill="#9da7b3">Public repos</text>
   <path d="M165 60 V117" stroke="#21262d"/>
-  <text x="178" y="90" font-family="Arial,Helvetica,sans-serif" font-size="29" font-weight="600" fill="#e6edf3">39</text>
+  <text x="178" y="90" font-family="Arial,Helvetica,sans-serif" font-size="29" font-weight="600" fill="#e6edf3">40</text>
   <text x="178" y="113" font-family="Arial,Helvetica,sans-serif" font-size="12" fill="#9da7b3">Merged PRs</text>
   <path d="M318 60 V117" stroke="#21262d"/>
   <text x="331" y="90" font-family="Arial,Helvetica,sans-serif" font-size="29" font-weight="600" fill="#e6edf3">5</text>
