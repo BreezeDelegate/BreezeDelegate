@@ -55,23 +55,30 @@ class ProfileMetricsTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "invalid GitHub follow counts"):
                 rm.public_follow_counts()
 
-    def test_calendar_start_clips_pre_account_history(self):
+    def test_calendar_begins_in_july_without_earlier_blank_days(self):
         created = dt.datetime(2026, 4, 8, 12, 0, tzinfo=UTC)
-        now = dt.datetime(2026, 9, 11, 18, 0, tzinfo=UTC)
+        now = dt.datetime(2026, 10, 29, 18, 0, tzinfo=UTC)
 
-        start = rm.calendar_start(created, now)
+        self.assertEqual(rm.calendar_start(created, now), dt.date(2026, 7, 1))
+        weeks = rm.build_activity_weeks([
+            {"date": "2026-06-30", "count": 5, "visibility": "public"},
+            {"date": "2026-07-01", "count": 2, "visibility": "public"},
+        ], created, now)
+        days = [day for week in weeks for day in week["contributionDays"]]
+        self.assertEqual(days[0]["date"], "2026-07-01")
+        self.assertEqual(days[0]["contributionCount"], 2)
+        self.assertFalse(any(day["date"] < "2026-07-01" for day in days))
+        self.assertLess(len(weeks), 20)
 
-        self.assertEqual(start, dt.date(2026, 4, 5))
-        self.assertLess((created.date() - start).days, 7)
-
-    def test_calendar_start_keeps_only_one_year_for_old_accounts(self):
+    def test_calendar_stays_on_previous_july_during_first_half_of_year(self):
         created = dt.datetime(2020, 1, 1, 0, 0, tzinfo=UTC)
-        now = dt.datetime(2026, 9, 11, 18, 0, tzinfo=UTC)
+        now = dt.datetime(2027, 1, 15, 18, 0, tzinfo=UTC)
+        self.assertEqual(rm.calendar_start(created, now), dt.date(2026, 7, 1))
 
-        start = rm.calendar_start(created, now)
-
-        self.assertGreaterEqual(start, dt.date(2025, 9, 7))
-        self.assertLessEqual(start, dt.date(2025, 9, 11))
+    def test_calendar_never_starts_before_account_creation(self):
+        created = dt.datetime(2026, 8, 12, 12, 0, tzinfo=UTC)
+        now = dt.datetime(2026, 10, 29, 18, 0, tzinfo=UTC)
+        self.assertEqual(rm.calendar_start(created, now), dt.date(2026, 8, 12))
 
     def test_public_activity_calendar_ignores_private_events(self):
         created = dt.datetime(2026, 9, 1, 0, 0, tzinfo=UTC)

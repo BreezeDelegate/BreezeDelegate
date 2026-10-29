@@ -98,13 +98,11 @@ def fmt_count(n: int) -> str:
 
 
 def calendar_start(created: dt.datetime, now: dt.datetime) -> dt.date:
-    """Return the first Sunday worth rendering for the public activity calendar."""
-    try:
-        one_year_ago = now.date().replace(year=now.year - 1)
-    except ValueError:
-        one_year_ago = now.date().replace(year=now.year - 1, day=28)
-    first_day = max(created.date(), one_year_ago)
-    return first_day - dt.timedelta(days=(first_day.weekday() + 1) % 7)
+    """Start public activity on July 1, excluding the sparse preceding months."""
+    july = dt.date(now.year, 7, 1)
+    if now.date() < july:
+        july = dt.date(now.year - 1, 7, 1)
+    return max(created.date(), july)
 
 
 def activity_level(count: int, maximum: int) -> str:
