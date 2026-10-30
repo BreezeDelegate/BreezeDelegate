@@ -12,9 +12,21 @@ Most of my work involves Linux, Python, Docker and backend systems. I also build
 
 Some of these systems are private or tied to specific projects, so their source code isn't here. The public projects and contributions below are easier to inspect.
 
-## Public work
+## Current projects
 
-**[Wisp MCP](https://github.com/BreezeDelegate/wisp-mcp)** lets MCP-compatible clients interact with WISP game panels. It's a Python integration covering server resources, files, console commands, backups and database operations, with permissions for sensitive actions. The code is public under the PolyForm Noncommercial license.
+### [BeforeUp](https://github.com/BreezeDelegate/beforeup)
+
+<a href="https://github.com/BreezeDelegate/beforeup">
+  <img src="https://raw.githubusercontent.com/BreezeDelegate/beforeup/main/assets/readme-banner.webp" alt="BeforeUp — Docker Compose preflight and deployment-change checks" width="620" />
+</a>
+
+A read-only Linux CLI for checking Docker Compose projects before deployment. It flags host port conflicts and missing bind-mount paths, and can compare planned changes with running containers.
+
+### [Wisp MCP](https://github.com/BreezeDelegate/wisp-mcp)
+
+A Python integration for MCP-compatible clients working with WISP game panels. It covers server resources, files, console commands, backups and databases, with permission controls for sensitive actions. The code is public under the PolyForm Noncommercial license.
+
+## Upstream contributions
 
 A few upstream changes I've contributed:
 
