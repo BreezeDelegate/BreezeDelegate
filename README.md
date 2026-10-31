@@ -1,8 +1,8 @@
 # BreezeDelegate
 
-I work on the problems that show up once software has to run somewhere. A deployment breaks, a service slows down, an API behaves differently than expected, or a server needs to survive something its original setup never anticipated. I like figuring out what went wrong and fixing the underlying problem.
+I build and operate Linux services, backend tools and game-server infrastructure. My work ranges from Docker Compose preflight checks to production troubleshooting, APIs and automation.
 
-Most of my work involves Linux, Python, Docker and backend systems. I also build web applications, automation tools and software around multiplayer games.
+I also contribute fixes upstream: interval scheduling in Tokio, Unicode content search in Linux Mint's Nemo, and better game-server monitoring in LinuxGSM. I care about fixing the underlying problem and leaving useful tests behind.
 
 ## Things I've worked on
 
@@ -28,11 +28,13 @@ A Python integration for MCP-compatible clients working with WISP game panels. I
 
 ## Upstream contributions
 
-A few upstream changes I've contributed:
+Selected changes merged into independent upstream projects:
 
-- [LinuxGSM](https://github.com/GameServerManagers/LinuxGSM/pull/4952): support for Debian's deb822 APT source files.
-- [Neovide](https://github.com/neovide/neovide/pull/3552): hardening Neovim restart handling.
-- [tailcat](https://github.com/tailscale/tailcat/pull/123): use SFTP when SCP supports it.
+- **[Tokio #8385](https://github.com/tokio-rs/tokio/pull/8385)** · Rust — fixed interval deadline overflow for extreme durations, including tests for reset and missed-tick strategies.
+- **[Nemo (Linux Mint) #3829](https://github.com/linuxmint/nemo/pull/3829)** · C — restored Unicode content search and added a regression test for combining characters.
+- **[LinuxGSM #5111](https://github.com/GameServerManagers/LinuxGSM/pull/5111)** · Shell — improved failed game-server health checks with local listener and port diagnostics.
+- **[tower-http #728](https://github.com/tower-rs/tower-http/pull/728)** · Rust — made directory trailing-slash redirects configurable while preserving existing defaults.
+- **[River #1359](https://github.com/riverqueue/river/pull/1359)** · Go — prevented recurring jobs from advancing their schedule after failed batch insertion, with regression coverage.
 
 ## Open source and collaboration
 
