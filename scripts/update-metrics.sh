@@ -17,11 +17,12 @@ fi
 git fetch -q origin main
 git merge --ff-only -q origin/main
 python3 -B scripts/render_metrics.py
+python3 -B scripts/render_language_activity.py --input github-metrics.svg --output-dir assets
 
-# Avoid a new commit unless the public counters actually changed.
-if git diff --quiet -- github-metrics.svg; then
+# Commit only when the generated public metrics or summary graphics change.
+if git diff --quiet -- github-metrics.svg assets/language-footprint-*.svg; then
   exit 0
 fi
-git add -- github-metrics.svg
+git add -- github-metrics.svg assets/language-footprint-*.svg
 git commit -m "Update public GitHub metrics"
 git push origin main
